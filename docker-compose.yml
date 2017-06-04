@@ -1,0 +1,141 @@
+version: "3"
+services:
+
+#base de donnée
+  db:
+    image: mariadb
+    container_name: mariadb
+    environment:
+      - MYSQL_ROOT_PASSWORD=passwd
+      - MYSQL_DATABASE=first_db_test
+      - MYSQL_USER=bob
+      - MYSQL_PASSWORD=bobpasswd
+    volumes:
+      - ./myDatabase:/var/lib/mysql
+      #- ./mdbconf/my.cnf:/etc/mysql/my.cnf
+    networks:
+      - db-net
+    restart: on-failure:5
+
+#interface de gestion de db
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: phpmyadmin
+    environment:
+      - PMA_ARBITRARY=1
+    ports:
+      - "8181:80"
+    volumes:
+      - ./phpmyadmin-sessions:/sessions
+    depends_on:
+      - db
+    networks:
+      - db-net
+      - db-admin
+    restart: on-failure:5
+
+#cms
+  wordpress:
+    image: wordpress
+    container_name: wordpress
+    ports:
+      - "8080:80"
+    environment:
+      - WORDPRESS_DB_HOST=db
+      - WORDPRESS_DB_USER=bob
+      - WORDPRESS_DB_PASSWORD=bobpasswd
+      - WORDPRESS_DB_NAME=first_db_test
+    depends_on:
+      - db
+    networks:
+      - wp-net
+      - db-net
+    restart: on-failure:5
+
+#serveur Web apache avec moteur php
+  apache-php:
+    image: eboraas/apache-php
+    container_name: apache-php
+    ports:
+      - "80:80"
+    volumes:
+      - ./www:/var/www:ro
+    networks:
+      - web-net
+    restart: on-failure:5
+
+#serveur git
+  gogs:
+    image: gogs/gogs
+    container_name: gogs
+    ports:
+      - "10022:22"
+      - "10080:3000"
+    volumes:
+      - ./gogs:/var/gogs  #keeps Git repositories and Gogs data
+    networks:
+      - git-net
+    restart: on-failure:5
+
+#monitoring du serveur et de ses ressources
+  cadvisor:
+    image: google/cadvisor:latest
+    container_name: cadvisor
+    ports:
+      - "8282:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    networks:
+      - monitor-net
+    restart: on-failure:5
+
+#interface web de gestion docker
+  portainer:
+    image: portainer/portainer
+    container_name: portainer
+    ports:
+      - "9000:9000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./portainer:/data
+    networks:
+      - monitor-net
+    restart: on-failure:5
+
+#serveur web nginx avec moteur lucee
+  lucee:
+    image: lucee/lucee5-nginx
+    container_name: lucee
+    ports:
+      - "8383:80"
+    volumes:
+      - ./lucee/config/server:/opt/lucee/server/lucee-server/context:ro
+      - ./lucee/config/web:/opt/lucee/web:ro
+      - ./lucee/www:/var/www:ro
+      - ./lucee/logs/lucee:/opt/lucee/web/logs
+      - ./lucee/logs/nginx:/var/log/nginx
+      - ./lucee/logs/supervisor:/var/log/supervisor
+      - ./lucee/logs/tomcat:/usr/local/tomcat/logs
+    networks:
+      - lu-net
+    restart: on-failure:5
+
+networks:
+  web-net:
+    driver: bridge
+  db-net:
+    driver: bridge
+    internal: true
+  git-net:
+    driver: bridge
+  wp-net:
+    driver: bridge
+  monitor-net:
+    driver: bridge
+  lu-net:
+    driver: bridge
+  db-admin:
+    driver: bridge
